@@ -1,4 +1,4 @@
 MicroCOS
 ========
 
-Real Time OS Code from UNR CPE 406 class 
+Real Time OS Code and parallel port work
