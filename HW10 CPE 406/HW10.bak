@@ -1,0 +1,174 @@
+/*
+*********************************************************************************************************
+*                                                uC/OS-II
+*                                          The Real-Time Kernel
+*
+*                          (c) Copyright 1992-2002, Jean J. Labrosse, Weston, FL
+*                                           All Rights Reserved
+*
+*                                               EXAMPLE #3
+*********************************************************************************************************
+*  Modified for DOS by Brian Streng, 3-22-11
+*
+*  HW7A - Parallel port interrupt driven signal generator, DOS version
+*********************************************************************************************************
+*/
+
+#include "includes.h"
+
+/*
+*********************************************************************************************************
+*                                              VARIABLES
+*********************************************************************************************************
+*/
+
+#define TRUE 					1
+#define FALSE 					0
+#define DATA 					0x0378         // output pin
+#define CTRL		 			0x037A         // input pin
+#define ORIGINAL_ISR 		0x0F
+#define IRQ_7 					0x21
+#define ESCAPE_KEY			0x1B
+
+void interrupt (*oldISR)(void);			   // declare pointer oldISR as type interrupt
+
+
+/*
+*********************************************************************************************************
+*                                         FUNCTION PROTOTYPES
+*********************************************************************************************************
+*/
+
+static  void  printDisplay(void);			// function to print the screen format
+void  interrupt far newISR();             // new Interrupt
+
+
+/*$PAGE*/
+/*
+*********************************************************************************************************
+*                                                  MAIN
+*********************************************************************************************************
+*/
+
+void  main (void)
+{
+	// local variables
+	INT16U	mask;
+	INT16S   key;
+
+
+	// **************** enter critical region   ***************
+	disable();
+
+
+
+	// capture the old ISR vector
+	oldISR = getvect(ORIGINAL_ISR);
+
+	// insert my new tick ISR vector into the vector table
+	setvect(ORIGINAL_ISR, &newISR);
+
+	// enable IRQ 7 on 8259
+	mask = inportb(IRQ_7);
+
+	// mask bit 7, set outport
+	outportb(IRQ_7, mask & 0x7F);
+
+	// enable parallel interrupt port
+	outportb(CTRL, inportb(CTRL) | 0x10);
+
+
+
+	// **************** exit critical region  ****************
+	enable();
+
+
+	// go print the display
+	printDisplay();
+
+	// loop always:
+	for (;;) {
+
+		// check for key press
+		if (PC_GetKey(&key)) {
+			// check for <esc> (begin exit if user presses <esc>)
+			if (key == ESCAPE_KEY) {
+
+				// **************** enter critical region  ****************
+				disable();
+
+					// disable parallel interrupt port
+					outportb(CTRL, inportb(CTRL) & 0x10);
+
+					// disable IRQ 7 on 8259
+					mask = inportb(IRQ_7);
+
+					// mask bit 7, set outport
+					outportb(IRQ_7, mask | 0x80);
+
+					// restore ISR
+					setvect(ORIGINAL_ISR, oldISR);
+
+
+				// **************** exit critical region  ****************
+				enable();
+
+				// clear the display
+				PC_DispClrScr(DISP_FGND_BLACK + DISP_BGND_LIGHT_GRAY);
+
+				// exit program and return to DOS
+				exit(0);
+			}
+		}
+	} // endloop
+	
+}
+
+/*$PAGE*/
+/*
+*********************************************************************************************************
+*                                        INITIALIZE THE DISPLAY
+*********************************************************************************************************
+*/
+
+static  void  printDisplay (void)
+{
+	
+	PC_DispClrScr(DISP_FGND_WHITE + DISP_BGND_BLACK);      /* Clear the screen                         */
+
+/*                                1111111111222222222233333333334444444444555555555566666666667777777777 */
+/*                      01234567890123456789012345678901234567890123456789012345678901234567890123456789 */
+	PC_DispStr( 0,  1, "                                                                                ", DISP_FGND_BLACK + DISP_BGND_RED);
+	PC_DispStr( 0,  2, "           {^_>^} EXAMPLE #3 - Modified 3/22/11 by BRIAN STRENG {^_>^}          ", DISP_FGND_WHITE + DISP_BGND_RED);
+	PC_DispStr( 0,  3, "                  HW 7A - Parallel Port Interrupts (DOS Version)                ", DISP_FGND_WHITE + DISP_BGND_RED);
+	PC_DispStr( 0,  4, "                                                                                ", DISP_FGND_BLACK + DISP_BGND_RED);
+
+	PC_DispStr( 0,  6, "   o     \\o/    - o            _|     \\ /     |_            o -    \\o/     o    ",      DISP_FGND_RED + DISP_BGND_BLUE);
+	PC_DispStr( 0,  7, "  /|\\     |      | \\    _\\o     \\o     |     o/     o/_    / |      |     /|\\   ",    DISP_FGND_RED + DISP_BGND_BLUE);
+	PC_DispStr( 0,  8, "  / \\    / \\    | \\    /) |     (\\    /o\\    /)     | (\\    / |    / \\    / \\   ", DISP_FGND_RED + DISP_BGND_BLUE);
+
+	PC_DispStr( 1, 23,  "                             <PRESS     TO QUIT>                              ", DISP_FGND_RED + DISP_BGND_BLACK);
+	PC_DispStr( 37, 23,                                     "ESC"													 , DISP_FGND_YELLOW + DISP_BGND_RED + DISP_BLINK);
+/*                                1111111111222222222233333333334444444444555555555566666666667777777777 */
+/*                      01234567890123456789012345678901234567890123456789012345678901234567890123456789 */
+}
+/*$PAGE*/
+
+
+/*
+*********************************************************************************************************
+*                                              MY NEW ISR
+*********************************************************************************************************
+*/
+
+void interrupt far newISR()
+{
+	// toggle d0
+	outportb(DATA, inportb(DATA) ^ 1);
+
+	// chain to original tick ISR
+	outportb(0x20,0x20);
+}
+
+
+

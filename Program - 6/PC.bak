@@ -1,0 +1,331 @@
+/*
+*********************************************************************************************************
+*                                          PC SUPPORT FUNCTIONS
+*
+*                        (c) Copyright 1992-1998, Jean J. Labrosse, Plantation, FL
+*                                           All Rights Reserved
+*
+* File : PCdos.C
+* By   : Jean J. Labrosse modified for use with DOS by D. Egbert 4/17/09
+*********************************************************************************************************
+*/
+
+#include <stdio.h>
+#include <dos.h>
+#include <conio.h>
+#include <time.h>
+#include "PC.h"
+
+/*
+*********************************************************************************************************
+*                                               CONSTANTS
+*********************************************************************************************************
+*/
+#define  DISP_BASE                  0xB800       /* Base segment of display (0xB800=VGA, 0xB000=Mono)  */
+#define  DISP_MAX_X                     80       /* Maximum number of columns                          */
+#define  DISP_MAX_Y                     25       /* Maximum number of rows                             */
+
+#define  TICK_T0_8254_CWR             0x43       /* 8254 PIT Control Word Register address.            */
+#define  TICK_T0_8254_CTR0            0x40       /* 8254 PIT Timer 0 Register address.                 */
+#define  TICK_T0_8254_CTR1            0x41       /* 8254 PIT Timer 1 Register address.                 */
+#define  TICK_T0_8254_CTR2            0x42       /* 8254 PIT Timer 2 Register address.                 */
+
+#define  TICK_T0_8254_CTR0_MODE3      0x36       /* 8254 PIT Binary Mode 3 for Counter 0 control word. */
+#define  TICK_T0_8254_CTR2_MODE0      0xB0       /* 8254 PIT Binary Mode 0 for Counter 2 control word. */
+#define  TICK_T0_8254_CTR2_LATCH      0x80       /* 8254 PIT Latch command control word                */
+
+#define  VECT_TICK                    0x08       /* Vector number for 82C54 timer tick                 */
+#define  VECT_DOS_CHAIN               0x81       /* Vector number used to chain DOS                    */
+
+/*
+*********************************************************************************************************
+*                                       LOCAL GLOBAL VARIABLES
+*********************************************************************************************************
+*/
+             
+static INT8U     sioerror;
+static INT16U    PC_ElapsedOverhead;
+static BOOLEAN   PC_ExitFlag;
+static INT8U     s_init[]={27,91,0x30,0x6d,0};        /*  esc [0m  */
+static INT8U     s_cls[] ={27,91,0x32,0x4a,0};        /*  esc[2J   */
+static INT8U     s_cln[] ={27,91,0x32,0x4b,0};        /*  esc[2K   */
+static INT8U     s_newl[]={27,0x45,0};                /*  escE     */
+static INT8U     s_rc[]  ={27,91,0x30,0x30,0x3b,0x30,0x30,0x48,0};
+static INT8U     s_atr[] ={27,91,0x30,59,0x32,59,0x33,0x37,59,0x34,0x30,59,0x32,0x6d,0};
+
+
+/*
+*********************************************************************************************************
+*                                              CLEAR SCREEN
+*
+* Description : This function clears the display screen by sending the clear screen ANSI escape sequence.
+*               Each character on the screen is composed of two bytes: the ASCII character to appear on
+*               the screen followed by a video attribute.  An attribute of 0x07 displays the character
+*               in WHITE with a black background.
+*
+* Arguments   : color   specifies the foreground/background color combination to use 
+*                       (see PCS.H for available choices)
+*
+* Returns     : None
+*********************************************************************************************************
+*/
+void PC_DispClrScr (INT8U color)
+{
+  setatr(color);
+  putstr(s_atr);
+  putstr(s_cls);
+}
+/*
+*********************************************************************************************************
+*                                             CLEAR A LINE
+*
+* Description : This function clears one of the 24 lines on the display screen by sending the ANSI clear
+*               line escape sequence. Each character on the screen is composed of two bytes: the ASCII
+*               character to appear on the screen followed by a video attribute.  An attribute of 0x07
+*               displays the character in WHITE with a black background.
+*
+* Arguments   : y            corresponds to the desired line to clear.  Valid line numbers are from 
+*                            0 to 23.  Line 0 corresponds to the topmost line.
+*
+*               color        specifies the foreground/background color combination to use
+*                            (see PCS.H for available choices)
+*
+* Returns     : None
+*********************************************************************************************************
+*/
+void PC_DispClrLine (INT8U y, INT8U color)
+{
+  y++;
+  setrc(y,0);
+  putstr(s_rc);
+  setatr(color);
+  putstr(s_atr);
+  putstr(s_cln);
+}
+/*
+*********************************************************************************************************
+*                           DISPLAY A SINGLE CHARACTER AT 'X' & 'Y' COORDINATE
+*
+* Description : This function writes a single character anywhere on the display screen.
+*               Each character on the screen is composed of two bytes: the ASCII character
+*               to appear on the screen followed by a video attribute.  An attribute of 0x07
+*               displays the character in WHITE with a black background.
+*
+* Arguments   : x      corresponds to the desired column on the screen.  Valid columns numbers are from
+*                      0 to 79.  Column 0 corresponds to the leftmost column.
+*               y      corresponds to the desired row on the screen.  Valid row numbers are from 0 to 34.
+*                      Line 0 corresponds to the topmost row.
+*               c      Is the ASCII character to display.  You can also specify a character with a
+*                      numeric value higher than 128.  In this case, special character based graphics
+*                      will be displayed.
+*               color  specifies the foreground/background color to use (see PCS.H for available choices)
+*                      and whether the character will blink or not.
+*
+* Returns     : None
+*********************************************************************************************************
+*/
+void PC_DispChar (INT8U x, INT8U y, INT8U c, INT8U color)
+{
+  y++;
+  x++;
+  setrc(y, x);
+  putstr(s_rc);
+  setatr(color);
+  putstr(s_atr);
+  putchar(c);
+}
+/*
+*********************************************************************************************************
+*                                 DISPLAY A STRING  AT 'X' & 'Y' COORDINATE
+*
+* Description : This function writes an ASCII string anywhere on the display screen.
+*               Each character on the screen is composed of two bytes: the ASCII character to appear
+*               on the screen followed by a video attribute.  An attribute of 0x07 displays the
+*               character in WHITE with a black background.
+*
+* Arguments   : x      corresponds to the desired column on the screen.  Valid columns numbers are from
+*                      0 to 79.  Column 0 corresponds to the leftmost column.
+*               y      corresponds to the desired row on the screen.  Valid row numbers are from 0 to 23.
+*                      Line 0 corresponds to the topmost row.
+*               s      Is the ASCII string to display.  You can also specify a string containing 
+*                      characters with numeric values higher than 128.  In this case, special character 
+*                      based graphics will be displayed.
+*               color  specifies the foreground/background color to use (see PCS.H for available choices)
+*                      and whether the characters will blink or not.
+*
+* Returns     : None
+*********************************************************************************************************
+*/
+void PC_DispStr (INT8U x, INT8U y, INT8U *s, INT8U color)
+{
+  y++;
+  x++;
+  setrc(y, x);
+  putstr(s_rc);
+  setatr(color);
+  putstr(s_atr);
+  putstr(s);
+}
+/*
+*********************************************************************************************************
+*                                       ELAPSED TIME INITIALIZATION
+*
+* Description : This function initialize the elapsed time module by determining how long the START and
+*               STOP functions take to execute.  In other words, this function calibrates this module
+*               to account for the processing time of the START and STOP functions.
+*
+* Arguments   : None.
+*
+* Returns     : None.
+*********************************************************************************************************
+*/
+void PC_ElapsedInit(void)
+{
+	 PC_ElapsedOverhead = 0;
+	 PC_ElapsedStart();
+	 PC_ElapsedOverhead = PC_ElapsedStop();
+}
+/*
+*********************************************************************************************************
+*                                         INITIALIZE PC'S TIMER #2
+*
+* Description : This function initialize the PC's Timer #2 to be used to measure the time between events.
+*               Timer #2 will be running when the function returns.
+*
+* Arguments   : None.
+*
+* Returns     : None.
+*********************************************************************************************************
+*/
+void PC_ElapsedStart(void)
+{
+	 INT8U data;
+
+	 data  = (INT8U)inp(0x61);                              /* Disable timer #2                         */
+	 data &= 0xFE;
+	 outp(0x61, data);
+	 outp(TICK_T0_8254_CWR,  TICK_T0_8254_CTR2_MODE0);      /* Program timer #2 for Mode 0              */
+	 outp(TICK_T0_8254_CTR2, 0xFF);
+	 outp(TICK_T0_8254_CTR2, 0xFF);
+	 data |= 0x01;                                          /* Start the timer                          */
+	 outp(0x61, data);
+}
+/*
+*********************************************************************************************************
+*                                 STOP THE PC'S TIMER #2 AND GET ELAPSED TIME
+*
+* Description : This function stops the PC's Timer #2, obtains the elapsed counts from when it was
+*               started and converts the elapsed counts to micro-seconds.
+*
+* Arguments   : None.
+*
+* Returns     : The number of micro-seconds since the timer was last started.
+*
+* Notes       : - The returned time accounts for the processing time of the START and STOP functions.
+*               - 54926 represents 54926S-16 or, 0.838097 which is used to convert timer counts to
+*                 micro-seconds.  The clock source for the PC's timer #2 is 1.19318 MHz (or 0.838097 uS)
+*********************************************************************************************************
+*/
+INT16U PC_ElapsedStop(void)
+{
+	 INT8U  data;
+	 INT8U  low;
+	 INT8U  high;
+	 INT16U cnts;
+	 data  = inp(0x61);                                           /* Disable the timer                  */
+	 data &= 0xFE;
+	 outp(0x61, data);
+	 outp(TICK_T0_8254_CWR, TICK_T0_8254_CTR2_LATCH);             /* Latch the timer value              */
+	 low  = inp(TICK_T0_8254_CTR2);
+	 high = inp(TICK_T0_8254_CTR2);
+	 cnts = (INT16U)0xFFFF - (((INT16U)high << 8) + (INT16U)low); /* Compute time it took for operation */
+	 return ((INT16U)((ULONG)cnts * 54926L >> 16) - PC_ElapsedOverhead);
+}
+/*
+*********************************************************************************************************
+*                                       GET THE CURRENT DATE AND TIME
+*
+* Description: This function obtains the current date and time from the PC.
+*
+* Arguments  : s     is a pointer to where the ASCII string of the current date and time will be stored.
+*                    You must allocate at least 19 bytes (includes the NUL) of storage in the return
+*                    string.
+*
+* Returns    : none
+*********************************************************************************************************
+*/
+void PC_GetDateTime (char *s)
+{
+    struct time now;
+    struct date today;
+	 gettime(&now);
+    getdate(&today);
+    sprintf(s, "%02d-%02d-%02d  %02d:%02d:%02d",
+	       today.da_mon,
+	       today.da_day,
+	       today.da_year,
+	       now.ti_hour,
+	       now.ti_min,
+	       now.ti_sec);
+}
+/*
+*********************************************************************************************************
+*                                        CHECK AND GET KEYBOARD KEY
+*
+* Description: This function checks to see if a key has been pressed at the keyboard and returns TRUE if
+*              so.  Also, if a key is pressed, the key is read and copied where the argument is pointing
+*              to.
+*
+* Arguments  : c     is a pointer to where the read key will be stored.
+*
+* Returns    : TRUE  if a key was pressed
+*              FALSE otherwise
+*********************************************************************************************************
+*/
+BOOLEAN PC_GetKey (INT16S *c)
+{
+    if (kbhit()) {                                         /* See if a key has been pressed            */
+        *c = getch();                                      /* Get key pressed                          */
+        return (TRUE);
+    } else {
+        *c = 0x00;                                         /* No key pressed                           */
+        return (FALSE);
+    }
+}
+/*************************************************************************/
+  	  /*          PCdos.C ANSI SUPPORT SUBROUTINES               */
+
+void putstr(INT8U *s)
+ {
+  int i = 0;
+  do
+  {
+  if (s[i] == 0) break;
+  putchar(s[i]);
+  } while (++i);
+ }
+
+void setrc(INT8U r, INT8U c)
+ {
+  s_rc[3] = ((r % 10) + 0x30);
+  if ((r /= 10) > 0) s_rc[2] = ((r % 10) + 0x30);
+        else s_rc[2] = 0x30;
+  s_rc[6] = ((c % 10) + 0x30);
+  if ((c /= 10) > 0) s_rc[5] = ((c % 10) + 0x30);
+        else s_rc[5] = 0x30;
+ }
+
+void setatr(INT8U color)
+ {
+  INT8U ctemp;
+  ctemp = (color & 0x0f);
+  if (ctemp < 8) s_atr[4] = 0x32;
+        else {s_atr[4] = 0x31; ctemp = ctemp - 8;}
+  s_atr[7] = (0x30 | ctemp);
+  ctemp = ((color & 0x70) >> 4);
+  s_atr[10] = (0x30 | ctemp);
+  if (color & 0x80) s_atr[12] = 0x35;
+        else s_atr[12] = s_atr[4];
+ }
+
+ 

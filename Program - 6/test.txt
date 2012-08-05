@@ -1,0 +1,83 @@
+*********************************************************************************************************
+*                                      CREATE APPLICATION TASKS
+*********************************************************************************************************
+*/
+
+void  TaskStartCreateTasks (void)
+{
+	 strcpy(TaskUserData[TASK_1_ID].TaskName, "MsgQ Rx Task");
+	 OSTaskCreateExt(Task1,
+						  (void *)0,
+						  &Task1Stk[TASK_STK_SIZE - 1],
+						  TASK_1_PRIO,
+						  TASK_1_ID,
+						  &Task1Stk[0],
+						  TASK_STK_SIZE,
+						  &TaskUserData[TASK_1_ID],
+						  0);
+
+	 strcpy(TaskUserData[TASK_2_ID].TaskName, "MsgQ Rx Task");
+	 OSTaskCreateExt(Task2,
+						  (void *)0,
+						  &Task2Stk[TASK_STK_SIZE - 1],
+						  TASK_2_PRIO,
+						  TASK_2_ID,
+						  &Task2Stk[0],
+						  TASK_STK_SIZE,
+						  &TaskUserData[TASK_2_ID],
+						  0);
+
+}
+/*$PAGE*/
+/*
+
+
+*********************************************************************************************************
+*                                               TASK #1
+*********************************************************************************************************
+*/
+
+void  Task1 (void *pdata)
+{
+	 char  *msg;
+	 INT8U  err;
+
+	 char test[30];
+	 char test2[30];
+
+	 INT8U count = 0;
+	 pdata = pdata;
+
+	 for (;;) {
+		msg = (char *)OSQPend(MsgQueue, 0, &err);
+		count++;
+		PC_DispStr(30, 5, msg, DISP_FGND_YELLOW + DISP_BGND_BLUE);
+		sprintf(test, "%i", count);
+		PC_DispStr(30, 4, test, DISP_FGND_YELLOW + DISP_BGND_BLUE);
+
+	 }
+}
+
+/*
+
+*********************************************************************************************************
+*                                               TASK #2
+*********************************************************************************************************
+*/
+
+void  Task2 (void *pdata)
+{
+	 char  msg[20];
+
+	 pdata = pdata;
+	 strcpy(&msg[0], "2 Second Tick YAY!");
+	 for (;;) {
+		while(tick < 400)
+		{
+		}
+		tick = 0;
+		OSQPost(MsgQueue, (void *)&msg[0]);
+	 }
+}
+/*$PAGE*/
+/*

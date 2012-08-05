@@ -1,0 +1,118 @@
+/*
+*********************************************************************************************************
+*                                                uC/OS-II
+*                                          The Real-Time Kernel
+*
+*                          (c) Copyright 1992-2002, Jean J. Labrosse, Weston, FL
+*                                           All Rights Reserved
+*
+*
+*
+*********************************************************************************************************
+*/
+
+#include "includes.h"
+
+/*
+*********************************************************************************************************
+*                                         FUNCTION PROTOTYPES
+*********************************************************************************************************
+*/
+static  void  TaskStartDispInit(void);
+void interrupt far newtick();
+void interrupt (*oldtick)(void);
+/*
+*********************************************************************************************************
+*                                                  MAIN
+*********************************************************************************************************
+*/
+
+void  main (void)
+{
+	 oldtick = getvect(0x08);
+	 setvect(0x08, &newtick);
+}
+
+/*
+*********************************************************************************************************
+*                                                  newtick
+*********************************************************************************************************
+*/
+void interrupt newtick()
+{
+	INT8U dmy1;
+
+	dmy1 = dmy1 + 1;
+	_chain_intr(oldtick);
+}
+
+
+/*
+*********************************************************************************************************
+*                                               STARTUP TASK
+*********************************************************************************************************
+*/
+
+void  TaskStart (void *pdata)
+{
+#if OS_CRITICAL_METHOD == 3                                /* Allocate storage for CPU status register */
+	 OS_CPU_SR  cpu_sr;
+#endif
+	 INT16S     key;
+	 char       s[80];
+	 char       dispStr[160];
+	 INT8U      err;
+
+
+	 pdata = pdata;                                         /* Prevent compiler warning                 */
+
+	 TaskStartDispInit();                                   /* Setup the display                        */
+
+
+}
+/*
+*********************************************************************************************************
+*                                        INITIALIZE THE DISPLAY
+*********************************************************************************************************
+*/
+
+static  void  TaskStartDispInit (void)
+{
+	 char    s[25];
+	 char    dispStr[25];
+
+	 PC_GetDateTime(s);
+	 sprintf(dispStr, "Program Start Time = %s", s );
+
+/*                                1111111111222222222233333333334444444444555555555566666666667777777777 */
+/*                      01234567890123456789012345678901234567890123456789012345678901234567890123456789 */
+	 PC_DispStr( 0,  0, "                         uC/OS-II, The Real-Time Kernel                         ", DISP_FGND_WHITE + DISP_BGND_RED + DISP_BLINK);
+	 PC_DispStr( 0,  1, "                                Jean J. Labrosse                                ", DISP_FGND_BLACK + DISP_BGND_LIGHT_GRAY);
+	 PC_DispStr( 0,  2, "                                                                                ", DISP_FGND_BLACK + DISP_BGND_LIGHT_GRAY);
+	 PC_DispStr( 0,  3, "    															                                ", DISP_FGND_BLACK + DISP_BGND_LIGHT_GRAY);
+	 PC_DispStr( 0,  4, "                                                                                ", DISP_FGND_BLACK + DISP_BGND_LIGHT_GRAY);
+	 PC_DispStr( 0,  5, "                                                                                ", DISP_FGND_BLACK + DISP_BGND_LIGHT_GRAY);
+	 PC_DispStr( 0,  6, "                                                                                ", DISP_FGND_BLACK + DISP_BGND_LIGHT_GRAY);
+	 PC_DispStr( 0,  7, "                                                                                ", DISP_FGND_BLACK + DISP_BGND_LIGHT_GRAY);
+	 PC_DispStr( 0,  8, "                                                                                ", DISP_FGND_BLACK + DISP_BGND_LIGHT_GRAY);
+	 PC_DispStr( 0,  9, "                                                                                ", DISP_FGND_BLACK + DISP_BGND_LIGHT_GRAY);
+	 PC_DispStr( 0, 10, "                                                                                ", DISP_FGND_BLACK + DISP_BGND_LIGHT_GRAY);
+	 PC_DispStr( 0, 11, "                                                                                ", DISP_FGND_BLACK + DISP_BGND_LIGHT_GRAY);
+	 PC_DispStr( 0, 12, "                                                                                ", DISP_FGND_BLACK + DISP_BGND_LIGHT_GRAY);
+	 PC_DispStr( 0, 13, "                                                                                ", DISP_FGND_BLACK + DISP_BGND_LIGHT_GRAY);
+	 PC_DispStr( 0, 14, "                                                                                ", DISP_FGND_BLACK + DISP_BGND_LIGHT_GRAY);
+	 PC_DispStr( 0, 15, "                                                                                ", DISP_FGND_BLACK + DISP_BGND_LIGHT_GRAY);
+	 PC_DispStr( 0, 16, "                                                                                ", DISP_FGND_BLACK + DISP_BGND_LIGHT_GRAY);
+	 PC_DispStr( 0, 17, "                                                                                ", DISP_FGND_BLACK + DISP_BGND_LIGHT_GRAY);
+	 PC_DispStr( 0, 18, "                                                                                ", DISP_FGND_BLACK + DISP_BGND_LIGHT_GRAY);
+	 PC_DispStr( 0, 19, "                                                                                ", DISP_FGND_BLACK + DISP_BGND_LIGHT_GRAY);
+	 PC_DispStr( 0, 20, "                                                                                ", DISP_FGND_BLACK + DISP_BGND_LIGHT_GRAY);
+	 PC_DispStr( 0, 21, "                                                                                ", DISP_FGND_BLACK + DISP_BGND_LIGHT_GRAY);
+	 PC_DispStr( 0, 22, "                                                                                ", DISP_FGND_BLACK + DISP_BGND_LIGHT_GRAY);
+	 PC_DispStr( 0, 23, "                            <-PRESS 'ESC' TO SHOW TIME->                       ", DISP_FGND_BLACK + DISP_BGND_LIGHT_GRAY + DISP_BLINK);
+/*                                1111111111222222222233333333334444444444555555555566666666667777777777 */
+/*                      01234567890123456789012345678901234567890123456789012345678901234567890123456789 */
+
+	 PC_DispStr( 0,  6, dispStr, DISP_FGND_YELLOW + DISP_BGND_BLUE); /* Display time on the screen            */
+
+}
